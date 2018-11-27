@@ -1,0 +1,13 @@
+Logging Serial output data with Termite [https://www.compuphase.com/software_termite.htm] saves all the measurements into one file.
+The individual measurements can then be separated using the split command line tool. 
+
+split -d -l 51203 termite_test_write2buffer_mode.txt data
+
+i.e.
+
+split -d -l <number of lines until next data-set> <name of data file> <output name scaffold>
+
+
+TO START WITH SPECIFIED NUMBERING:
+split --numeric=1 -l 51203 termite_test_write2buffer_mode.txt data.txt 
+
