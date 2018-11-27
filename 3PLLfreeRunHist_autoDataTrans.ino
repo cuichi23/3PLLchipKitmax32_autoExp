@@ -160,22 +160,6 @@ void updateDisplay(){
     sevseg.writeDisplay();
 }
 
-// check transmission delay
-void checkTransmissionDelay(){
-    if (transmissionDelay < 0) transmissionDelay = 0;
-    if (transmissionDelay > transmissionDelayMax) transmissionDelay = transmissionDelayMax;
-}
-
-void introduceDeltaPertOnlyEnd(){                                               // shifts are given in terms of index of dataBuffer
-    Serial.println("Perturbation function started. Change only last state of dataBuffer for PLL 1 (middle)!"); // SOLUTION_3
-    if( bitRead(dataBuffer[BUFFER_SIZE-1],1)==0 ){
-      bitWrite(dataBuffer[BUFFER_SIZE-1], 1, 1);
-    }
-    else{
-      bitWrite(dataBuffer[BUFFER_SIZE-1], 1, 0);
-    }
-}
-
 // serial transmit data
 void serialWriteDataBuffer(){
     digitalWrite(BOARD_LED, LOW);                                               // turn off board led
@@ -254,6 +238,10 @@ void setup() {
 **********************************************/
 
 void loop() {
+    // within this if condition the measurement is performed; during setup(), the buffer is set up, coupling is turned off, the delay-value is set, the display is initiated
+    // and a core timer service is attached (timerISR), start_it is toggled 'true'
+    // along with the attachement of the core timer service, the loop() function starts and the first measurement begins
+    // --> start_it variable will be toggled false to prevent reentry into this part of the loop before the buffer has been flushed to the serial port...
     if ( start_it ){
         start_it = !start_it;                                                 // switch start_it to FALSE, prevent entering this if-condition
                                                                               // PLLs are still running in coupled mode
@@ -282,11 +270,10 @@ void loop() {
         coupling = !coupling;                                                 // turn off coupling
         Serial.print("Buffer full! bufferIdx: ");                             // check the bufferIdx state
         Serial.println(bufferIdx,DEC);
-        writeoutmode = !writeoutmode;
+        writeoutmode = !writeoutmode;                                         // toggle boolean variable: here toggle true, such that display blinks to signal write out phase
         updateDisplay();
         serialWriteDataBuffer();                                              // write out buffer
-        writeoutmode = !writeoutmode;
-        updateDisplay();
+        writeoutmode = !writeoutmode; updateDisplay();                        // toggle boolean variable: here toggle false, such that display does NOT blink, signals measurement phase
 
         //write2buffer = !write2buffer;                                       // alternative to deattaching the timeISR - enable buffer write
         attachCoreTimerService(timerISR);                                     // reattach the timerISR service to continue
