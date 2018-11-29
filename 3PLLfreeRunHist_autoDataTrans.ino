@@ -10,12 +10,13 @@
 // set the baud rate of the serial port
 #define BAUDRATE 115200
 
-// set the buffer size (number of samples and maximal possible delay)
-#define BUFFER_SIZE 51200
+// set the buffer size (number of samples and maximal possible delay), i.e.: 51200, max:
+#define BUFFER_SIZE 65500
 
 // define the waiting time and reference time for the coupling activation
 unsigned int period    = 0;
 unsigned long time_now = 0;
+
 
 // divider to set the sampling rate
 #define SAMPLERATE 100 //300
@@ -59,13 +60,7 @@ uint8_t mode;            // mode = 0: free running PLLs (no coupling)
 uint8_t dataBuffer[BUFFER_SIZE];
 volatile uint16_t bufferIdx;
 volatile uint16_t delayedIdx;
-volatile int counter;
-
-int kk   = 0;
-int idx;
-// edgetype contains the information about the type of edge: 1->raising, 0->falling
-int edgetype = 0;
-int edgePLL;
+volatile int rnd;
 
 // output bits and port
 // bits:  7   6   5   4   3   2   1   0
@@ -93,8 +88,9 @@ volatile boolean coupling;
 volatile boolean start_it;
 volatile boolean writeoutmode = false;
 volatile boolean write2buffer = true;
+volatile boolean test_dummy = true;
 //volatile boolean check_it = true;
-//volatile boolean test_dummy = true;
+
 
 // 7 segment LED display
 Adafruit_7segment sevseg = Adafruit_7segment();
@@ -216,17 +212,31 @@ void setup() {
     sevseg.setBrightness(0.2);
           updateDisplay();
 
-    // Serial.print("Doublecheck 1 - time Serial.print: ");
-    // Serial.println(micros());
-    // Serial.println(micros());
-    // Serial.print("Doublecheck 2 - time set variable: ");
-    // Serial.println(micros());
-    // rnd = 1;
-    // Serial.println(micros());
-    // Serial.print("Doublecheck 3 - time boolean switch: ");
-    // Serial.println(micros());
-    // test_dummy = !test_dummy;
-    // Serial.println(micros());
+    Serial.print("Doublecheck 1 - time Serial.print output of micros(): ");
+    Serial.println(micros());
+    Serial.println(micros());
+    Serial.print("Doublecheck 1.1 - time Serial.print 'K on:': ");
+    Serial.println(micros());
+    Serial.println("K on:");
+    Serial.println(micros());
+    Serial.print("Doublecheck 2 - time set variable: ");
+    Serial.println(micros());
+    rnd = 1;
+    Serial.println(micros());
+    Serial.print("Doublecheck 3 - time boolean switch: ");
+    Serial.println(micros());
+    test_dummy = !test_dummy;
+    Serial.println(micros());
+    Serial.print("Doublecheck 4 - time to call micros(): ");
+    Serial.println(micros());
+    time_now = micros();
+    Serial.println(micros());
+    Serial.print("Doublecheck 5 - time to call while-loop: ");
+    Serial.println(micros());
+    while(micros() < time_now) {
+      // should be fullfilled right away
+    }
+    Serial.println(micros());
 
     Serial.println("uC is ready! Start measurement!");
     // start timer interrupt to read/write --> will trigger the loop
@@ -248,22 +258,30 @@ void loop() {
         period = 5000;                                                        // set free-running time in microseconds --> e.g. 5000 us = 5 ms
         triggerRun = 1;                                                       // trigger the run
 
-        //coupling = !coupling;                                                 // turn off coupling (only if set to true in setup())
+        //coupling = !coupling;                                                 // turn off coupling (only if set to true in setup()-fct.)
         //delay(2000);
-        bufferIdx = 0;                                                        // reset buffer index to zero to begin writing the uncoupled case
-        time_now = micros();                                                  // save current time in microseconds after program has started
-        // Serial.print("K off at: ");                                           // write out the current time, TAKE into account the measured delays due to the
-        // Serial.println(micros());                                             // code executed in between!
+        time_now  = micros();                                                 // save current time in microseconds after program has started
+        bufferIdx = 0;                                                        // reset buffer index to zero to begin writing the uncoupled case -- good here,
+                                                                              // needs almost no time
+        //Serial.print("K off: ");                                            // write out the current time, TAKE into account the measured delays due to the
+        //Serial.println(micros());                                             // code executed in between!
 
         while(micros() < time_now + period){                                  // wait approx. [period] ms -- instead of using delay, since
             // Serial.println(micros());
         }                                                                     // while delay, the program halts and no buffer is written etc.
-        // Serial.print("K on at: ");
-        // Serial.println(micros());
-        coupling = !coupling;
+        //Serial.print("K on: ");
+        //Serial.println(micros());
+        coupling = !coupling;                                                 // toggle coupling state to 'on', now that free-running phase is buffered
+        if (bufferIdx == (BUFFER_SIZE-1) && triggerRun == 1){
+            // this is just here to make the processing time for coupled and uncoupled state equally long
+        }
+    }
+
+    while(micros() < time_now){
+        // this is just here to make the processing time for coupled and uncoupled state equally long
     }
     // data buffer is full
-    if (bufferIdx == (BUFFER_SIZE-1) && triggerRun == 1){
+    if (bufferIdx == (BUFFER_SIZE-1) && triggerRun == 1){                     // flush data buffer to serial port
         //Serial.println("Now detach timerISR!");
         detachCoreTimerService(timerISR);                                     // detach the timerISR to prevent that the buffer is overwritten before it is saved
         //write2buffer = !write2buffer;                                       // alternative to deattaching the timeISR - disable buffer write
@@ -292,14 +310,19 @@ void loop() {
 uint32_t timerISR(uint32_t currentTime){
     // interrupt trigger [PORT 46]
     LATFSET = B11;
-    // Serial.print("Doublecheck 4 - timerISR periods: ");
+    // Serial.print("Doublecheck 6 - timerISR periods: ");
     // Serial.println(micros());
+
+    // moved here, that it will be carried out in the coupled and uncoupled case
+    delayedIdx = (bufferIdx + BUFFER_SIZE - transmissionDelay*DELAY_SCALE)%BUFFER_SIZE;
+    outBits    = virtualCoupling(dataBuffer[delayedIdx]);                       // read delayed states
 
     // free running PLLs
     //if (!coupling and write2buffer ) {
     if (!coupling) {
       //Serial.println("in timerISR: uncoupled");
       LATESET               = 0xFF;                                             // set all output pins to HIGH
+
       inBits                = PORTB bitand 0xFF;                                // read data from PLLs [NOTE: '&' used to be 'bitand']
       dataBuffer[bufferIdx] = inBits;                                           // write input bits to buffer
       bufferIdx             = (bufferIdx + 1) % BUFFER_SIZE;                    // increment buffer index
@@ -307,10 +330,10 @@ uint32_t timerISR(uint32_t currentTime){
     // delay coupled PLLs
     //else if (coupling and write2buffer ) {
     else {
+      //Serial.print("Doublecheck 6 - timerISR periods: ");
+      //Serial.println(micros());
       //Serial.println("OK");
       //Serial.println("in timerISR: coupled");
-      delayedIdx            = (bufferIdx + BUFFER_SIZE - transmissionDelay*DELAY_SCALE)%BUFFER_SIZE;
-      outBits               = virtualCoupling(dataBuffer[delayedIdx]);          // read delayed states
       LATESET               = outBits bitand 0xFF;                              // write data [NOTE: '&' used to be 'bitand']
       LATECLR               = ~outBits bitand 0xFF;                             // write data [NOTE: '&' used to be 'bitand']
 

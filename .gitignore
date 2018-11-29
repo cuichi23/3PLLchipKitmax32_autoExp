@@ -1,2 +1,10 @@
-Termite_SerialPortLog/test_data_termitest_detachTimerISR
-Termite_SerialPortLog/test_data_write2buffer_mode
+3PLLfreeRunHist_autoDataTrans_conflict-20181128-221758.ino
+
+Termite_SerialPortLog/*
+Processing_receiveSerialPortData/*
+
+!*/Termite_SerialPortLog/exp_TS.m
+!*/Termite_SerialPortLog/INFO_split_results_files
+!*/Termite_SerialPortLog/IMPORTANT_INFO_SAMPLEPERIOD
+!*/Termite_SerialPortLog/test_time_needed_code.txt
+!*/Termite_SerialPortLog/test_time_needed_code_1.txt
